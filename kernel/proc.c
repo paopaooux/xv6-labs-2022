@@ -145,7 +145,9 @@ found:
   memset(&p->context, 0, sizeof(p->context));
   p->context.ra = (uint64)forkret;
   p->context.sp = p->kstack + PGSIZE;
-
+ 
+  p->mask=0;
+ 
   return p;
 }
 
@@ -276,8 +278,7 @@ growproc(int n)
 
 // Create a new process, copying the parent.
 // Sets up child kernel stack to return as if from fork() system call.
-int
-fork(void)
+int fork(void)
 {
   int i, pid;
   struct proc *np;
@@ -309,9 +310,8 @@ fork(void)
   np->cwd = idup(p->cwd);
 
   safestrcpy(np->name, p->name, sizeof(p->name));
-
+  np->mask=p->mask;
   pid = np->pid;
-
   release(&np->lock);
 
   acquire(&wait_lock);
@@ -321,7 +321,6 @@ fork(void)
   acquire(&np->lock);
   np->state = RUNNABLE;
   release(&np->lock);
-
   return pid;
 }
 
@@ -680,4 +679,15 @@ procdump(void)
     printf("%d %s %s", p->pid, state, p->name);
     printf("\n");
   }
+}
+
+uint64 
+count_process(void){
+  uint64 cnt=0;
+  for(struct proc *p=proc;p<&proc[NPROC];p++){
+    if(p->state!=UNUSED){
+      cnt++;
+    }
+  }
+  return cnt;
 }

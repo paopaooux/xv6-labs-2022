@@ -30,7 +30,7 @@ kinit()
   freerange(end, (void*)PHYSTOP);
 }
 
-void
+void 
 freerange(void *pa_start, void *pa_end)
 {
   char *p;
@@ -79,4 +79,17 @@ kalloc(void)
   if(r)
     memset((char*)r, 5, PGSIZE); // fill with junk
   return (void*)r;
+}
+
+uint64
+count_free_mem(void){
+  acquire(&kmem.lock);
+  uint64 mem_bytes=0;
+  struct run *r=kmem.freelist;
+  while(r){
+    mem_bytes+=PGSIZE;
+    r=r->next;
+  }
+  release(&kmem.lock);
+  return mem_bytes;
 }

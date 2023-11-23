@@ -1,0 +1,16 @@
+{
+    "files.associations": {
+        "stat.h": "c",
+        "types.h": "c",
+        "user.h": "c",
+        "ratio": "c",
+        "riscv.h": "c",
+        "defs.h": "c",
+        "param.h": "c",
+        "memlayout.h": "c",
+        "proc.h": "c",
+        "spinlock.h": "c",
+        "sysinfo.h": "c",
+        "*.inc": "c"
+    }
+}
