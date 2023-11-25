@@ -75,6 +75,34 @@ int
 sys_pgaccess(void)
 {
   // lab pgtbl: your code here.
+  uint64 StartVA;
+  argaddr(0,&StartVA);
+
+  int len;
+  argint(1,&len);
+  
+  uint64 BitMaskVA;
+
+  argaddr(2,&BitMaskVA);
+
+  if(len>MAXSCAN){
+    len=MAXSCAN;
+  }
+
+  uint64 BitMask=0;
+  for(int i=0;i<len;StartVA+=PGSIZE,i++){
+    pte_t *pte=walk(myproc()->pagetable,StartVA,0);
+    if(*pte==0){
+      panic("pgaccess : walk failed");
+    }
+    if(*pte&PTE_A){
+      *pte&=~PTE_A;
+      BitMask|=1<<i;
+    }
+  }
+  if(copyout(myproc()->pagetable,BitMaskVA,(char*)&BitMask,sizeof(BitMask))<0){
+    return -1;
+  }
   return 0;
 }
 #endif
