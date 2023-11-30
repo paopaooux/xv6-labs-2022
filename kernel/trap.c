@@ -67,7 +67,11 @@ usertrap(void)
     syscall();
   } else if((which_dev = devintr()) != 0){
     // ok
-  } else {
+  }else if((r_scause() == 13 || r_scause() == 15) && uvmcheckcowpage(r_stval())){
+    if(uvmcowcopy(r_stval())==-1){
+        setkilled(p);
+    }
+  }else {
     printf("usertrap(): unexpected scause %p pid=%d\n", r_scause(), p->pid);
     printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());
     setkilled(p);
@@ -77,9 +81,17 @@ usertrap(void)
     exit(-1);
 
   // give up the CPU if this is a timer interrupt.
-  if(which_dev == 2)
+  // if(which_dev==2&&p->AlarmInteval!=0&&p->InHandler==0){
+  //   p->Counter++;
+  //   if(p->Counter==p->AlarmInteval){
+  //     memmove(&p->alarmframe,p->trapframe,sizeof(struct trapframe));
+  //     p->trapframe->epc=p->Handler;
+  //     p->InHandler=1;
+  //   }
+  // }
+  if(which_dev == 2){
     yield();
-
+  }
   usertrapret();
 }
 
