@@ -1,0 +1,8 @@
+{
+    "files.associations": {
+        "__stddef_max_align_t.h": "c",
+        "mutex": "c",
+        "*.inc": "c",
+        "condition_variable": "c"
+    }
+}
