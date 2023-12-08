@@ -15,6 +15,7 @@
 #include "sleeplock.h"
 #include "file.h"
 #include "fcntl.h"
+#include "memlayout.h"
 
 // Fetch the nth word-sized system call argument as a file descriptor
 // and return both the descriptor and the corresponding struct file.
@@ -501,5 +502,145 @@ sys_pipe(void)
     fileclose(wf);
     return -1;
   }
+  return 0;
+}
+
+struct vma *findvma(struct proc *p,uint64 va){
+  for(int i=0;i<NVMA;i++){
+    struct vma *vv=&p->vmas[i];
+    if(vv->valid==1&&va>=vv->vastart&&va<vv->vastart+vv->sz){
+      return vv;
+    }
+  }
+  return 0;
+}
+
+int vmatrylazytouch(uint64 va){
+  struct proc *p=myproc();
+  struct vma *v=findvma(p,va);
+  if(v==0){
+    return 0;
+  }
+  void *pa=kalloc();
+  if(pa==0){
+    panic("vmalazytouch: kalloc");
+  }
+  memset(pa,0,PGSIZE);
+
+  begin_op();
+  ilock(v->f->ip);
+  readi(v->f->ip,0,(uint64)pa,v->offset+PGROUNDDOWN(va-v->vastart),PGSIZE);
+  iunlock(v->f->ip);
+  end_op();
+  
+  int perm=PTE_U;
+  if(v->prot&PROT_READ){
+    perm|=PTE_R;
+  }
+  if(v->prot&PROT_WRITE){
+    perm|=PTE_W;
+  }
+  if(v->prot&PROT_EXEC){
+    perm|=PTE_X;
+  }
+
+  if(mappages(p->pagetable,va,PGSIZE,(uint64)pa,PTE_R|PTE_W|PTE_U)<0){
+    panic("vmalazytouch: mappages");
+  }
+  
+  return 1;
+}
+
+uint64 
+sys_mmap(void){
+  uint64 addr,sz,offset;
+  int prot,flags,fd;
+  struct file *f;
+  argaddr(0,&addr);
+  argaddr(1,&sz);
+  argint(2,&prot);
+  argint(3,&flags);
+  if(argfd(4,&fd,&f)<0){
+    return -1;
+  }
+  argaddr(5,&offset);
+  if(addr<0||sz<0||prot<0||offset<0){
+    return -1;
+  }
+  if((prot&PROT_READ)&&!f->readable){
+    return -1;
+  }
+  if((prot&PROT_WRITE)&&!(flags&MAP_PRIVATE)&&!f->writable){
+    return -1;
+  }
+  sz=PGROUNDUP(sz);
+  struct proc *p=myproc();
+  struct vma *v=0;
+  uint64 vaend=MMAPEND;
+  for(int i=0;i<NVMA;i++){
+    struct vma *vv=&p->vmas[i];
+    if(vv->valid==0){
+       if(v==0){
+        v=&p->vmas[i];
+        v->valid=1;
+       } 
+    }else if(vv->vastart<vaend){
+      vaend=PGROUNDDOWN(vv->vastart);
+    }
+  }
+  if(v==0){
+    panic("mmap: no free vma");
+  }
+  v->vastart=vaend-sz;
+  v->sz=sz;
+  v->prot=prot;
+  v->flags=flags;
+  v->f=f;
+  v->offset=offset;
+  filedup(v->f);
+  return v->vastart;
+}
+
+uint64
+sys_munmap(void){
+  uint64 addr,sz;
+  
+  argaddr(0,&addr);
+  argaddr(1,&sz);
+  if(addr<0||sz<0){
+    return -1;
+  }
+  struct proc *p=myproc();
+  struct vma *v=findvma(p,addr);
+  if(v==0){
+    return -1;
+  }
+  if(addr>v->vastart&&addr+sz<v->vastart+v->sz){
+    return -1;
+  }
+  
+  uint64 addr_aligned=addr;
+  if(addr>v->vastart){
+    addr_aligned=PGROUNDUP(addr);
+  }
+
+  int nunmap=sz-(addr_aligned-addr);
+  if(nunmap<0){
+    nunmap=0;
+  }
+
+  vmaunmap(p->pagetable,addr_aligned,nunmap,v);
+
+  if(addr<=v->vastart&&addr+sz > v->vastart){
+    v->offset=addr+sz-v->vastart;
+    v->vastart=addr+sz;
+  }
+  v->sz-=sz;
+
+  if(v->sz<=0){
+    fileclose(v->f);
+    v->valid=0;
+  }
+  
   return 0;
 }
